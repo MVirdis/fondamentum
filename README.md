@@ -1,0 +1,3 @@
+# Fondamentum
+
+Quantopian trading algorithm
