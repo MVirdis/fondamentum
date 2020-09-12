@@ -74,7 +74,8 @@ def make_pipeline():
     """
 
     pipe = Pipeline(
-        columns={'roe': Fundamentals.roe.latest,'close': USEquityPricing.close.latest},
+        columns={'roe': Fundamentals.roe.latest,
+                 'close': USEquityPricing.close.latest},
         screen=Q500US()
     )
     return pipe
@@ -107,12 +108,12 @@ def rebalance(context, data):
     df = algo.pipeline_output('pipeline')
 
     # These are the securities that we are interested in trading each month.
-    security_list = df['roe'].nlargest(context.roe_top_n).index
+    top_roe = df['roe'].nlargest(context.roe_top_n).index
     
     # Perform Momentum calculations for each security
     ranking = []
-    for sec in security_list:
-        ts = data.history(sec,'price',context.momentum_days,'1d')
+    for sec in top_roe:
+        ts = data.history(sec,'price',context.momentum_days+context.days_to_skip+10,'1d')
         score = momentum_score(ts[:-context.days_to_skip])
         if score > context.score_to_go:
             ranking.append((score,sec))
@@ -125,38 +126,31 @@ def rebalance(context, data):
 
     # weights for next order
     weights = {}
-    alphas = {}
     
     # First find positions to close
     for sec in context.portfolio.positions:
         if sec not in sec_to_trade:
             if sec not in context.bonds:
                 weights[sec] = 0.0
-                alphas[sec] = 0.0
             elif context.can_buy_stocks: # TODO Gradual decrease of bonds not all at once sold
                 weights[sec] = 0.0
-                alphas[sec] = 0.0
     
     # Compute remaining weights
     if context.can_buy_stocks and context.can_buy:
         
         for sec in sec_to_trade:
             weights[sec]=1.0/len(sec_to_trade)
-            alphas[sec] = (df['roe'])[sec]*10
             
     elif not context.can_buy_stocks and context.can_buy: # buy bonds
         
         cs = current_money_in_stocks(context)
-        bond_weight = 1.0-(cs/(cs+context.portfolio.cash))
+        bond_weight = 1.0-(cs/context.portfolio.portfolio_value)
         
         for bond in context.bonds:
             if bond_weight > 0.0:
                 weights[bond] = bond_weight/len(context.bonds)
             else:
                 weights[bond] = 0.0
-            
-            vv = [v for v in alphas.values()]
-            alphas[bond] = max(vv)+1.0 if len(vv)>0 else 0
     
     if context.use_weights: # Use optimizer with weights
         objective = TargetWeights(weights)
@@ -167,14 +161,12 @@ def rebalance(context, data):
         algo.order_optimal_portfolio(objective, constraints)
 
 def current_money_in_stocks(context):
-    pw = {}
     ss = 0.0
     for sec in context.portfolio.positions:
         if sec in context.bonds:
             continue
         pos = context.portfolio.positions[sec]
         ss += pos.amount * pos.cost_basis
-        pw[sec] = pos.amount * pos.cost_basis
 
     return ss
     
@@ -197,3 +189,4 @@ def record_vars(context, data):
     record(stocks=ss)
     record(bonds=bs)
     record(cash=cash)
+    
