@@ -6,6 +6,7 @@ from quantopian.optimize import TargetWeights, NetExposure, PositionConcentratio
 from quantopian.pipeline import Pipeline
 from quantopian.pipeline.data.builtin import USEquityPricing
 from quantopian.pipeline.data import Fundamentals
+from quantopian.pipeline.data.morningstar import Fundamentals as MSFundamentals
 from quantopian.pipeline.filters import QTradableStocksUS, Q500US, Q1500US
 from scipy import stats
 import numpy as np
@@ -75,6 +76,9 @@ def make_pipeline():
 
     pipe = Pipeline(
         columns={'roe': Fundamentals.roe.latest,
+                 'roic': Fundamentals.roic.latest,
+                 'pb': MSFundamentals.pb_ratio.latest,
+                 'cap': Fundamentals.market_cap.latest,
                  'close': USEquityPricing.close.latest},
         screen=Q1500US()
     )
